@@ -30,6 +30,7 @@
            :cu-ctx-create
            :cu-ctx-destroy
            :cu-ctx-synchronize
+           :cu-device-total-mem
            :cu-mem-alloc
            :cu-mem-free
            :cu-mem-host-register
@@ -41,6 +42,7 @@
            :cu-module-load
            :cu-module-unload
            :cu-module-get-function
+           :cu-module-get-global
            :cu-launch-kernel
            :cu-event-create
            :cu-event-destroy

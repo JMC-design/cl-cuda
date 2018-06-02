@@ -5,7 +5,7 @@
 
 (in-package :cl-user)
 (defpackage cl-cuda-test.lang.compiler.type-of-expression
-  (:use :cl :cl-test-more
+  (:use :cl :prove
         :cl-cuda.lang.compiler.type-of-expression
         :cl-cuda.lang.data
         :cl-cuda.lang.type
@@ -18,6 +18,7 @@
                 :type-of-cuda-dimension
                 :type-of-reference
                 :type-of-inline-if
+                :type-of-constructor
                 :type-of-arithmetic
                 :type-of-function))
 (in-package :cl-cuda-test.lang.compiler.type-of-expression)
@@ -33,7 +34,7 @@
 
 (let ((var-env (empty-variable-environment))
       (func-env (empty-function-environment)))
-  (is (type-of-expression 1 nil nil) 'int))
+  (is (type-of-expression 1 var-env func-env) 'int))
 
 
 ;;;
@@ -84,13 +85,16 @@
 
 (diag "TYPE-OF-REFERENCE - VARIABLE")
 
-(let ((var-env (variable-environment-add-variable 'y-expansion 'float
+(let ((var-env (variable-environment-add-global 'z 'int 1
+                (variable-environment-add-variable 'y-expansion 'float
                  (variable-environment-add-symbol-macro 'y 'y-expansion
-                   (variable-environment-add-variable 'x 'int
-                     (empty-variable-environment)))))
+                  (variable-environment-add-variable 'x 'int
+                   (empty-variable-environment))))))
       (func-env (empty-function-environment)))
   (is (type-of-reference 'x var-env func-env) 'int
       "basic case 1")
+  (is (type-of-reference 'z var-env func-env) 'int
+      "basic caase 2")
   (is-error (type-of-reference 'y var-env func-env) simple-error
             "FORM which is a variable not found.")
   (is-error (type-of-reference 'a var-env func-env) simple-error
@@ -152,7 +156,12 @@
 
 
 ;;;
-;;; test TYPE-OF-ARITHMETIC function (not implemented)
+;;; test TYPE-OF-CONSTRUCTOR function
+;;;
+
+
+;;;
+;;; test TYPE-OF-ARITHMETIC function
 ;;;
 
 

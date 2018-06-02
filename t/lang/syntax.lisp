@@ -5,7 +5,7 @@
 
 (in-package :cl-user)
 (defpackage cl-cuda-test.lang.syntax
-  (:use :cl :cl-test-more
+  (:use :cl :prove
         :cl-cuda.lang.data
         :cl-cuda.lang.syntax))
 (in-package :cl-cuda-test.lang.syntax)
@@ -100,6 +100,11 @@
 
 
 ;;;
+;;; test Vector constructor
+;;;
+
+
+;;;
 ;;; test Arithmetic
 ;;;
 
@@ -171,6 +176,23 @@
                           (return)))
     "basic case 2")
 (ok (symbol-macrolet-p '(symbol-macrolet ((x 'expanded-x))))
+    "basic case 3")
+
+
+;;;
+;;; test Macrolet statement
+;;;
+
+(diag "Macrolet statement")
+
+(ok (macrolet-p '(macrolet ((x () 'expanded-x))
+                  (return)))
+    "basic case 1")
+(ok (macrolet-p '(macrolet ((x () 'expanded-x))
+                  (do-something)
+                  (return)))
+    "basic case 2")
+(ok (macrolet-p '(macrolet ((x () 'expanded-x))))
     "basic case 3")
 
 

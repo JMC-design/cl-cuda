@@ -15,7 +15,9 @@
            :defkernelmacro
            :expand-macro-1
            :expand-macro
-           :defkernel-symbol-macro)
+           :defkernel-symbol-macro
+           :defglobal
+           :global-ref)
   (:shadow :expand-macro-1
            :expand-macro)
   (:import-from :alexandria
@@ -140,3 +142,30 @@
 
 (defmacro defkernel-symbol-macro (name expansion)
   `(kernel-manager-define-symbol-macro *kernel-manager* ',name ',expansion))
+
+
+;;;
+;;; DEFGLOBAL
+;;;
+
+(defmacro defglobal (name expression &optional qualifiers)
+  `(kernel-manager-define-global *kernel-manager*
+                                 ',name
+                                 ',(or qualifiers :device)
+                                 ',expression))
+
+(defun global-ref (name type &optional (manager *kernel-manager*))
+  (let* ((device-ptr (ensure-kernel-global-loaded manager name))
+         (cffi-type (cffi-type type))
+         (cffi-type-size (cffi-type-size type)))
+    (cffi:with-foreign-object (host-ptr cffi-type)
+      (cu-memcpy-device-to-host host-ptr device-ptr cffi-type-size)
+      (cffi:mem-ref host-ptr cffi-type))))
+
+(defun (setf global-ref) (value name type &optional (manager *kernel-manager*))
+  (let* ((device-ptr (ensure-kernel-global-loaded manager name))
+         (cffi-type (cffi-type type))
+         (cffi-type-size (cffi-type-size type)))
+    (cffi:with-foreign-object (host-ptr cffi-type)
+      (setf (cffi:mem-ref host-ptr cffi-type) value)
+      (cu-memcpy-host-to-device device-ptr host-ptr cffi-type-size))))

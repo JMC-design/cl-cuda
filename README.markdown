@@ -45,12 +45,15 @@ For the whole code, please see [examples/vector-add.lisp](https://github.com/tak
 
 ## Installation
 
-Since cl-cuda is not available in Quicklisp distribution because of its testing policy (see [#514](https://github.com/quicklisp/quicklisp-projects/issues/514) in quicklisp-projects), please use its local-projects feature.
+You can install cl-cuda via quicklisp.
 
-    $ cd ~/quicklisp/local-projects
-    $ git clone git://github.com/takagi/cl-cuda.git
+    > (ql:quickload :cl-cuda)
 
-Then `(ql:quickload :cl-cuda)` from `REPL` to load it.
+You may encounter the following error, please install CFFI explicitly `(ql:quickload :cffi)` before loading cl-cuda. Just once is enough.
+
+    Component CFFI-GROVEL not found
+       [Condition of type ASDF/FIND-SYSTEM:MISSING-COMPONENT]
+
 
 ## Requirements
 
@@ -104,15 +107,23 @@ Further information:
 * SBCL 1.1.12
 * All tests pass, all examples work
 
+#### Environment6 (Thanks to @gos-k)
+* Ubuntu 16.04.1 LTS
+* GeForce GTX 1080
+* CUDA Version 8.0.27
+* Driver Version 367.35
+* CCL Version 1.11-r16635  (LinuxX8664)
+* All tests pass, all examples work
+
 ## API
 
-Here explain some API commonly used.
+Here explain some APIs commonly used.
 
 ### [Macro] with-cuda
 
     WITH-CUDA (dev-id) &body body
 
-Initializes CUDA and keeps a CUDA context during `body`. `dev-id` are passed to `get-cuda-device` function and the device handler returned is passed to `create-cuda-context` function to create a CUDA context in the expanded form. The results of `get-cuda-device` and `create-cuda-context` functions are bound to `*cuda-device*` and `*cuda-context*` special variables respectively. The kernel manager unloads before `with-cuda` exits.
+Initializes CUDA and keeps a CUDA context during `body`. `dev-id` is passed to `get-cuda-device` function and the device handler returned is passed to `create-cuda-context` function to create a CUDA context in the expanded form. The results of `get-cuda-device` and `create-cuda-context` functions are bound to `*cuda-device*` and `*cuda-context*` special variables respectively. The kernel manager unloads before `with-cuda` exits.
 
 ### [Function] synchronize-context
 
@@ -151,6 +162,23 @@ Copies stored data between host memory and device memory for `memory-block`. `di
 
 Accesses `memory-block`'s element specified by `index`. Note that the accessed memory area is that on host memory. Use `sync-memory-block` to synchronize stored data between host memory and device memory.
 
+### [Macro] defglobal
+
+    DEFGLOBAL name type &optional expression qualifiers
+
+Defines a global variable. `name` is a symbol which is the name of the variable. `type` is the type of the variable. Optional `expression` is an expression which initializes the variable. Optional `qualifiers` is one of or a list of keywords: `:device`, `:constant`, `:shared`, `:managed` and `:restrict`, which are corresponding to CUDA C's `__device__`, `__constant__`, `__shared__`, `__managed__` and `__restrict__` variable qualifiers. If not given, `:device` is used.
+
+    (defglobal pi float 3.14159 :constant)
+
+### [Accessor] global-ref
+
+Accesses a global variable's value on device from host with automatically copying its value from/to device.
+
+    (defglobal x :device int 0)
+    (global-ref x)                 ; => 0
+    (setf (global-ref x) 42)
+    (global-ref x)                 ; => 42
+
 ### [Special Variable] \*tmp-path\*
 
 Specifies the temporary directory in which cl-cuda generates files such as `.cu` file and `.ptx` file. The default is `"/tmp/"`.
@@ -159,9 +187,9 @@ Specifies the temporary directory in which cl-cuda generates files such as `.cu`
 
 ### [Special Variable] \*nvcc-options\*
 
-Specifies additional command-line options to be passed to `nvcc` comand which cl-cuda calls internally. The default is `(list "-arch=sm_20")`.
+Specifies additional command line options passed to `nvcc` command that cl-cuda calls internally. The default is `nil`. If `-arch=sm_XX` option is not specified here, it is automatically inserted with `cuDeviceComputeCapability` driver API.
 
-    (setf *nvcc-options* (list "-arch=sm_20 --verbose"))
+    (setf *nvcc-options* (list "-arch=sm_20" "-m32"))
 
 ### [Special Variable] \*nvcc-binary\*
 
@@ -177,7 +205,7 @@ Specifies whether to let cl-cuda show operational messages or not. The default i
 
 ### [Special Variable] \*sdk-not-found\*
 
-Readonly. The value is `nil` if cl-cuda found CUDA SDK when its build, otherwise `t`.
+Readonly. The value is `t` if cl-cuda could not find CUDA SDK or at least it failed to load `libcuda` for some reason, otherwise `nil`.
 
     *sdk-not-found*    ; => nil
 
@@ -240,6 +268,26 @@ Compiled:
 
     {
       return 1.0;
+    }
+
+### MACROLET statement
+
+    MACROLET ({(name lambda-list local-form*)}*) statement*
+
+`macrolet` establishes local macro definitions, using the same format as `defkernelmacro`, and executes a series of `statement`s with these definition bindings.
+
+Example:
+
+    (macrolet ((square (a)
+                 (if (numberp a)
+                     (* a a)
+                     `(* ,a ,a))))
+      (return (square 2)))
+
+Compiled:
+
+    {
+      return 4;
     }
 
 ### DO statement
@@ -373,17 +421,18 @@ The initial state is its entry point. The compiled state is a state where kernel
 
 Following illustrates the kernel manager's state transfer.
 
-    　    compile-module        load-module            load-function
-    　  =================>    =================>     =================>
-    　I                    II                    III                    IV
-    　  <=================    <=================
-    　    define-function     <========================================
-    　    define-macro          unload
-    　    define-symbol-macro
+          compile-module        load-module            load-function
+        =================>    =================>     =================>
+      I                    II                    III                    IV
+        <=================    <=================
+          define-function     <========================================
+          define-macro          unload
+          define-symbol-macro
+          define-global
 
 `kernel-manager-compile-module` function compiles defined kernel functions into a CUDA kernel module. `kernel-manager-load-module` function loads the obtained kernel module. `kernel-manager-load-function` function loads each kernel function in the kernel module.
 
-In the module-loaded state and function-loaded state, `kernel-manager-unload` function unloads the kernel module and turn the kernel manager's state back to the compiled state. `kernel-manager-define-function`, `kernel-manager-define-macro` and `kernel-manager-define-symbol-macro` functions, which are wrapped as `defkernel`, `defkernelmacro` and `defkernel-symbol-macro` macros respectively, change its state back into the initial state and make it require compilation again.
+In the module-loaded state and function-loaded state, `kernel-manager-unload` function unloads the kernel module and turn the kernel manager's state back to the compiled state. `kernel-manager-define-function`, `kernel-manager-define-macro`, `kernel-manager-define-symbol-macro` and `kernel-manager-define-global` functions, which are wrapped as `defkernel`, `defkernelmacro`, `defkernel-symbol-macro` and `defglobal` macros respectively, change its state back into the initial state and make it require compilation again.
 
 The kernel manager is stored in `*kernel-manager*` special variable when cl-cuda is loaded and keeps alive during the Common Lisp process. Usually, you do not need to manage it explicitly.
 

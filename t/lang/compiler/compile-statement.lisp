@@ -5,7 +5,7 @@
 
 (in-package :cl-user)
 (defpackage cl-cuda-test.lang.compiler.compile-statement
-  (:use :cl :cl-test-more
+  (:use :cl :prove
         :cl-cuda.lang.util
         :cl-cuda.lang.data
         :cl-cuda.lang.type
@@ -17,6 +17,7 @@
                 :compile-if
                 :compile-let
                 :compile-symbol-macrolet
+                :compile-macrolet
                 :compile-do
                 :compile-with-shared-memory
                 :compile-set
@@ -115,6 +116,29 @@
         "basic case 1")))
 
 
+;;;
+;;; test COMPILE-MACROLET function
+;;;
+
+(diag "COMPILE-MACROLET")
+
+(let ((var-env (empty-variable-environment))
+      (func-env (empty-function-environment)))
+  (let ((lisp-code '(macrolet ((square (x) `(* ,x ,x)))
+                     (return (square 2))))
+        (c-code (unlines "{"
+                         "  return (2 * 2);"
+                         "}")))
+    (is (compile-macrolet lisp-code var-env func-env) c-code
+        "basic case 1"))
+  (let ((lisp-code '(macrolet ((optimized-square (x) (* x x)))
+                     (return (optimized-square 2))))
+        (c-code (unlines "{"
+                         "  return 4;"
+                         "}")))
+    (is (compile-macrolet lisp-code var-env func-env) c-code
+        "basic case 2")))
+
 
 ;;;
 ;;; test COMPILE-DO function
@@ -189,7 +213,7 @@
                       (set (aref a 0 0) 1.0)))
         (c-code (unlines "{"
                          "  __shared__ float a[16][16];"
-                         "  a[0][0] = 1.0;"
+                         "  a[0][0] = 1.0f;"
                          "}")))
     (is (compile-with-shared-memory lisp-code var-env func-env) c-code
         "basic case 5")))
@@ -200,7 +224,7 @@
                       (set (aref a 0) 1.0)))
         (c-code (unlines "{"
                          "  __shared__ float a[(16 + 2)];"
-                         "  a[0] = 1.0;"
+                         "  a[0] = 1.0f;"
                          "}")))
     (is (compile-with-shared-memory lisp-code var-env func-env) c-code
         "basic case 6")))
@@ -247,7 +271,7 @@
                  (empty-variable-environment)))
       (func-env (empty-function-environment)))
   (is (compile-set '(set (float3-x x) 1.0) var-env func-env)
-      (unlines "x.x = 1.0;")
+      (unlines "x.x = 1.0f;")
       "basic case 3")
   (is-error (compile-set '(set (float3-x x) 1) var-env func-env)
             simple-error))
